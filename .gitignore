@@ -1,0 +1,4 @@
+bin/
+ocr-translate
+*.exe
+.env
