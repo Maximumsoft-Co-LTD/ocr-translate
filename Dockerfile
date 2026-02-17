@@ -1,5 +1,5 @@
 # ---- Build Stage ----
-FROM --platform=linux/amd64 habor-proxy.analytichpxv3.online/dockerhub/golang:1.24-alpine AS builder
+FROM --platform=linux/amd64 docker.mirror.hashicorp.services/golang:1.24-alpine AS builder
 
 WORKDIR /app
 COPY go.mod ./
@@ -8,7 +8,7 @@ COPY . .
 RUN CGO_ENABLED=0 go build -o /ocr-translate .
 
 # ---- Runtime Stage ----
-FROM --platform=linux/amd64 habor-proxy.analytichpxv3.online/dockerhub/alpine:3.20
+FROM --platform=linux/amd64 docker.mirror.hashicorp.services/alpine:3.20
 
 RUN apk add --no-cache tesseract-ocr ca-certificates tzdata
 RUN tesseract --version
