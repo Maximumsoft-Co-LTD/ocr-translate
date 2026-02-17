@@ -56,7 +56,7 @@ jobs:
                -H "Authorization: token ${{ secrets.TOKEN_PUSH_REPO }}" \
                -H "Accept: application/vnd.github.everest-preview+json" \
                ${{ secrets.URL_K8S_3RD_PAYMENT }} \
-               -d '{"event_type": "trigger_target_workflow", "client_payload": {"pathValue": ".Deployments.api.image_version" , "image_tag": "${{ steps.variables.outputs.image_tag }}", "env": "${{ steps.variables.outputs.env_name }}" } }'
+               -d '{"event_type": "trigger_target_workflow", "client_payload": {"pathValue": ".Deployments.tesseract.image_version" , "image_tag": "${{ steps.variables.outputs.image_tag }}", "env": "${{ steps.variables.outputs.env_name }}" } }'
              
 
   tagging:
