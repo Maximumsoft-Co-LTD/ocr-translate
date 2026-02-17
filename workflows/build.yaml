@@ -1,0 +1,98 @@
+name: CI/CD Pipeline
+
+env:
+  NAME: orc-translate
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - releases/**
+    tags:        
+      - v*
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up variables
+        id: variables
+        run: |
+          if [[ $GITHUB_REF == "refs/heads/main" ]]; then
+            echo "env_name=uat" >> $GITHUB_OUTPUT
+            echo "image_tag=uat-$(git rev-parse --short "$GITHUB_SHA")" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_EVENT_NAME == "push" && $GITHUB_REF == "refs/tags/"* ]]; then
+            echo "env_name=prd" >> $GITHUB_OUTPUT
+            echo "image_tag=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+          else
+            echo "env_name=dev" >> $GITHUB_OUTPUT
+            echo "image_tag=dev-$(git rev-parse --short "$GITHUB_SHA")" >> $GITHUB_OUTPUT
+            
+          fi
+
+      - name:  Generate a config.json
+        if: ${{ startsWith(github.ref, 'refs/heads/') }}
+        run: |
+          echo ${{ secrets.JFROG_SERVER }}
+          echo "{\"auths\":{\"${{secrets.JFROG_SERVER}}\":{\"auth\":\"$(printf "%s:%s" "${{secrets.JFROG_USERNAME}}" "${{secrets.JFROG_PASSWORD}}" | base64 | tr -d '\n')\"}}}" > config.json
+
+      - name: Build an image
+        if: ${{ startsWith(github.ref, 'refs/heads/') }}
+        run: |
+          docker run \
+            -v $(pwd):/workspace \
+            -v $(pwd)/config.json:/kaniko/.docker/config.json:ro \
+            gcr.io/kaniko-project/executor:latest \
+              --context dir:///workspace/ \
+              --dockerfile Dockerfile \
+              --destination "${{secrets.JFROG_PATH}}/$NAME:${{ steps.variables.outputs.image_tag }}"
+
+      - name: Trigger to Edit Images
+        run: |
+          curl -X POST \
+               -H "Authorization: token ${{ secrets.TOKEN_PUSH_REPO }}" \
+               -H "Accept: application/vnd.github.everest-preview+json" \
+               ${{ secrets.URL_K8S_3RD_PAYMENT }} \
+               -d '{"event_type": "trigger_target_workflow", "client_payload": {"pathValue": ".Deployments.api.image_version" , "image_tag": "${{ steps.variables.outputs.image_tag }}", "env": "${{ steps.variables.outputs.env_name }}" } }'
+             
+
+  tagging:
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: build
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up variables
+        id: variables
+        run: |
+          if [[ $GITHUB_REF == "refs/heads/master" ]]; then
+            echo "env_name=uat" >> $GITHUB_OUTPUT
+            echo "image_tag=uat-$(git rev-parse --short "$GITHUB_SHA")" >> $GITHUB_OUTPUT
+          elif [[ $GITHUB_EVENT_NAME == "push" && $GITHUB_REF == "refs/tags/"* ]]; then
+            echo "env_name=prd" >> $GITHUB_OUTPUT
+            echo "image_tag=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+          else
+            echo "env_name=dev" >> $GITHUB_OUTPUT
+            echo "image_tag=dev-$(git rev-parse --short "$GITHUB_SHA")" >> $GITHUB_OUTPUT
+            
+          fi
+
+      - name: Tag Docker image
+        run: |
+          echo ${{secrets.JFROG_PASSWORD}} | docker login ${{secrets.JFROG_SERVER}} -u ${{secrets.JFROG_USERNAME}} --password-stdin
+          docker pull ${{secrets.JFROG_PATH}}/$NAME:uat-$(git rev-parse --short "$GITHUB_SHA")
+          docker tag ${{secrets.JFROG_PATH}}/$NAME:uat-$(git rev-parse --short "$GITHUB_SHA") ${{secrets.JFROG_PATH}}/$NAME:${{  github.ref_name }}
+          docker push ${{secrets.JFROG_PATH}}/$NAME:${{  github.ref_name }}
+
+    
+
+
+
+
+
+
